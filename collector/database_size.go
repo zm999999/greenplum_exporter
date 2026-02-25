@@ -28,7 +28,7 @@ const (
 		end) as bloat_state 
 		FROM gp_toolkit.gp_bloat_diag ORDER BY bloat_state desc
 	`
-	skewTableSql = `
+	skewTableSql_V6 = `
 		SELECT current_database(),schema_name,table_name,max_div_avg,pg_size_pretty(total_size) table_size 
 		FROM (
 			SELECT schema_name,table_name,
@@ -50,6 +50,30 @@ const (
 		WHERE total_size >= 1024*1024*1024
 		AND max_div_avg>1.5
 		ORDER BY total_size DESC;
+	`
+	skewTableSql_V7 = `
+		SELECT current_database(),
+		       schema_name,
+		       table_name,
+		       max_div_avg,
+		       pg_size_pretty(total_size) AS total_size
+		FROM (SELECT n.nspname                       AS schema_name,
+		             o.relname                       AS table_name,
+		             MAX(size) / (AVG(size) + 0.001) AS max_div_avg,
+		             SUM(size)::bigint               AS total_size
+		      FROM (SELECT gp_segment_id,
+		                   oid,
+		                   pg_relation_size(oid) AS size
+		            FROM gp_dist_random('pg_class')
+		            WHERE relkind = 'r'
+		              -- 过滤 AO 表（GP7 用 pg_appendonly）
+		              AND oid NOT IN (SELECT relid FROM pg_appendonly)) t
+		               JOIN pg_class o ON t.oid = o.oid
+		               JOIN pg_namespace n ON o.relnamespace = n.oid
+		      GROUP BY n.nspname, o.relname) tab
+		WHERE total_size >= 1024 * 1024 * 1024
+		  AND max_div_avg > 1.5
+		ORDER BY max_div_avg desc;
 	`
 	hitCacheRateSql = `select sum(blks_hit)/(sum(blks_read)+sum(blks_hit))*100 from pg_stat_database;`
 	txCommitRateSql = `select sum(xact_commit)/(sum(xact_commit)+sum(xact_rollback))*100 from pg_stat_database;`
@@ -239,6 +263,10 @@ func queryBloatTables(conn *sql.DB, ch chan<- prometheus.Metric) error {
 }
 
 func querySkewTables(conn *sql.DB, ch chan<- prometheus.Metric) error {
+	skewTableSql := skewTableSql_V7
+	if ver < 7 {
+		skewTableSql = skewTableSql_V6
+	}
 	rows, err := conn.Query(skewTableSql)
 	logger.Infof("Query skew tables sql: %s", skewTableSql)
 

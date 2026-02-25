@@ -13,6 +13,19 @@ import (
  */
 
 const (
+	connectionsSql_V7 = `select count(*)                                  as total,
+						        count(*) filter (where state <> 'active') as idle,
+						        count(*) filter (where state = 'active')  as active,
+						        count(*) filter (
+						            where state = 'active'
+						                and wait_event_type is null
+						            )                                     as running,
+						        count(*) filter (
+						            where state = 'active'
+						                and wait_event_type is not null
+						            )                                     as waiting
+						 from pg_stat_activity
+						 where pid <> pg_backend_pid();`
 	connectionsSql_V6 = `select 
                          count(*) total, 
                          count(*) filter(where state<>'active') idle, 
@@ -72,7 +85,10 @@ func (connectionsScraper) Name() string {
 }
 
 func (connectionsScraper) Scrape(db *sql.DB, ch chan<- prometheus.Metric, ver int) error {
-	querySql := connectionsSql_V6
+	querySql := connectionsSql_V7
+	if ver < 7 {
+		querySql = connectionsSql_V6
+	}
 	if ver < 6 {
 		querySql = connectionsSql_V5
 	}
