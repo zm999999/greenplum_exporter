@@ -103,7 +103,8 @@ func (locksScraper) Scrape(db *sql.DB, ch chan<- prometheus.Metric, ver int) err
 	defer rows.Close()
 
 	for rows.Next() {
-		var pid, datname, usename, locktype, mode, application_name, state, lock_satus, query string
+		var pid, datname, locktype, mode, lock_satus string
+		var usename, application_name, state, query sql.NullString
 		var startTime time.Time
 		var count int64
 
@@ -123,7 +124,7 @@ func (locksScraper) Scrape(db *sql.DB, ch chan<- prometheus.Metric, ver int) err
 			return err
 		}
 
-		ch <- prometheus.MustNewConstMetric(locksDesc, prometheus.GaugeValue, float64(startTime.UTC().Unix()), pid, datname, usename, locktype, mode, application_name, state, lock_satus, query)
+		ch <- prometheus.MustNewConstMetric(locksDesc, prometheus.GaugeValue, float64(startTime.UTC().Unix()), pid, datname, usename.String, locktype, mode, application_name.String, state.String, lock_satus, query.String)
 	}
 
 	return nil
