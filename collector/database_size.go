@@ -262,7 +262,7 @@ func queryBloatTables(conn *sql.DB, ch chan<- prometheus.Metric) error {
 	return combineErr(errs...)
 }
 
-func querySkewTables(conn *sql.DB, ch chan<- prometheus.Metric) error {
+func querySkewTables(conn *sql.DB, ch chan<- prometheus.Metric, ver int) error {
 	skewTableSql := skewTableSql_V7
 	if ver < 7 {
 		skewTableSql = skewTableSql_V6
